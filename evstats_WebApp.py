@@ -122,7 +122,7 @@ def fetch_maker_metrics(time_period: str) -> pd.DataFrame:
       }
 
     Output dataframe columns:
-      Period, total, tesla, byd, leapmotor, geely
+      Period, total, tesla, byd, leapmotor, geely, Volkswagen, BMW
     Last periods:
       - month: last 18
       - quarter: last 12
@@ -293,6 +293,7 @@ show_maker_table(mm_quarter, "Quarterly Maker Metrics (Last 18 Quarters)")
 
 # Yearly
 show_maker_table(mm_year, "Yearly Maker Metrics")
+
 
 
 
