@@ -12,7 +12,7 @@ import streamlit as st
 # -----------------------------
 st.set_page_config(page_title="EVStats Web App", layout="wide")
 
-MAKERS = ["total", "byd", "volvo" , "hyundai" , "tesla", "geely", "leapmotor", "volkswagen", "BMW", "changan deepal" ]
+MAKERS = ["total", "byd", "volvo" , "hyundai" , "tesla", "geely", "leapmotor", "volkswagen", "bmw", "changan deepal" ]
 BASE_DAILY = "https://evstats.gr/api/dailyBevModels/"
 BASE_MAKER = "https://evstats.gr/api/makerMetrics"
 
@@ -122,7 +122,7 @@ def fetch_maker_metrics(time_period: str) -> pd.DataFrame:
       }
 
     Output dataframe columns:
-      Period, total, tesla, byd, leapmotor, geely, volkswagen, BMW, changan deepal
+      Period, total, tesla, byd, leapmotor, geely, volkswagen, bmw, changan deepal
     Last periods:
       - month: last 18
       - quarter: last 12
@@ -293,6 +293,7 @@ show_maker_table(mm_quarter, "Quarterly Maker Metrics (Last 18 Quarters)")
 
 # Yearly
 show_maker_table(mm_year, "Yearly Maker Metrics")
+
 
 
 
