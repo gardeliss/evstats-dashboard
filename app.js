@@ -1,9 +1,9 @@
 // Configuration
 const MAKERS = ["total", "byd", "tesla", "volvo", "hyundai", "geely", "leapmotor", "volkswagen", "bmw", "changan deepal"];
 
-// NO CORS PROXY - Try direct calls first
-const USE_PROXY = false; // Set to true if direct calls fail
-const CORS_PROXY = USE_PROXY ? "https://api.allorigins.win/get?url=" : "";
+// Use allOrigins CORS proxy (more reliable than corsproxy.io)
+const USE_PROXY = true;
+const CORS_PROXY = "https://api.allorigins.win/get?url=";
 
 const BASE_DAILY = "https://evstats.gr/api/dailyBevModels/";
 const BASE_MAKER = "https://evstats.gr/api/makerMetrics";
@@ -61,38 +61,51 @@ async function fetchDaily(dateStr, retries = 2) {
             const response = await fetch(url, {
                 method: 'GET',
                 headers: {
-                    'Accept': 'application/json'
+                    'Accept': 'application/json',
+                    'Accept-Encoding': 'gzip, deflate, br'
                 },
-                signal: AbortSignal.timeout(10000) // 10 second timeout
+                signal: AbortSignal.timeout(10000)
             });
             
             if (!response.ok) {
                 if (attempt < retries) {
-                    console.warn(`⚠️ Attempt ${attempt + 1} failed for ${dateStr}, retrying...`);
+                    console.warn(`⚠️ Attempt ${attempt + 1} failed for ${dateStr} (${response.status}), retrying...`);
                     await new Promise(resolve => setTimeout(resolve, 500));
                     continue;
                 }
-                console.error(`API Error: ${response.status} - ${dateStr}`);
+                console.error(`❌ API Error: ${response.status} - ${dateStr}`);
                 return null;
             }
+            
+            // Check if we got data
+            const contentLength = response.headers.get('content-length');
+            const contentType = response.headers.get('content-type');
+            
+            console.log(`📦 ${dateStr}: ${contentType}, ${contentLength} bytes`);
             
             let data;
             if (USE_PROXY) {
                 const proxyResponse = await response.json();
+                // allOrigins returns: {contents: "...", status: {...}}
                 data = JSON.parse(proxyResponse.contents);
             } else {
                 data = await response.json();
             }
             
-            console.log(`✓ ${dateStr}`);
+            if (!data || typeof data !== 'object') {
+                console.error(`❌ Invalid data for ${dateStr}:`, data);
+                return null;
+            }
+            
+            console.log(`✓ ${dateStr}`, Object.keys(data));
             return data;
         } catch (error) {
             if (attempt < retries) {
-                console.warn(`⚠️ Attempt ${attempt + 1} error for ${dateStr}, retrying...`);
+                console.warn(`⚠️ Attempt ${attempt + 1} error for ${dateStr}: ${error.message}, retrying...`);
                 await new Promise(resolve => setTimeout(resolve, 500));
                 continue;
             }
-            console.error('Fetch error for', dateStr, ':', error.message);
+            console.error(`❌ Fetch error for ${dateStr}:`, error.message);
             return null;
         }
     }
@@ -122,10 +135,12 @@ function extractCarModels(dailyJson) {
 async function fetchCurrentMonthData() {
     const today = new Date();
     const year = today.getFullYear();
-    const month = today.getMonth() + 1; // JavaScript months are 0-indexed
+    const month = today.getMonth() + 1;
     
     hideError();
     showLoading();
+    
+    console.log(`🚀 Starting fetch for ${year}-${month}`);
     
     const daysInMonth = new Date(year, month, 0).getDate();
     const aggregated = {};
@@ -137,12 +152,14 @@ async function fetchCurrentMonthData() {
         if (currentDate <= today) totalDays++;
     }
     
+    console.log(`📅 Total days to fetch: ${totalDays}`);
+    
     let fetchedDays = 0;
+    let successfulFetches = 0;
     
     for (let day = 1; day <= daysInMonth; day++) {
         const currentDate = new Date(year, month - 1, day);
         
-        // Stop at today
         if (currentDate > today) {
             break;
         }
@@ -151,24 +168,32 @@ async function fetchCurrentMonthData() {
         const data = await fetchDaily(dateStr);
         const models = extractCarModels(data);
         
+        console.log(`   Models for ${dateStr}:`, Object.keys(models).length, 'models');
+        
+        if (Object.keys(models).length > 0) {
+            successfulFetches++;
+        }
+        
         const row = { date: dateStr };
         
         for (const [model, count] of Object.entries(models)) {
             const numCount = parseInt(count) || 0;
             row[model] = numCount;
-            // Aggregate: sum all counts for the month
             aggregated[model] = (aggregated[model] || 0) + numCount;
         }
         
         dailyRows.push(row);
         
-        // Update progress
         fetchedDays++;
         const loadingText = document.querySelector('.loading-state p');
         if (loadingText) {
             loadingText.textContent = `Φόρτωση δεδομένων... (${fetchedDays}/${totalDays} ημέρες)`;
         }
     }
+    
+    console.log(`✅ Fetch complete: ${successfulFetches}/${totalDays} successful`);
+    console.log(`📊 Total models aggregated:`, Object.keys(aggregated).length);
+    console.log(`📋 Sample models:`, Object.keys(aggregated).slice(0, 5));
     
     hideLoading();
     
@@ -177,12 +202,18 @@ async function fetchCurrentMonthData() {
         return;
     }
     
+    if (successfulFetches === 0) {
+        showError('Όλα τα API calls απέτυχαν - ελέγξτε το Console για λεπτομέρειες');
+        return;
+    }
+    
     dailyData = dailyRows;
     
-    // Create summary sorted by count (highest first)
     summaryData = Object.entries(aggregated)
         .map(([model, count]) => ({ model, count }))
         .sort((a, b) => b.count - a.count);
+    
+    console.log(`🏆 Top 5 models:`, summaryData.slice(0, 5));
     
     renderDailySection(year, month);
 }
