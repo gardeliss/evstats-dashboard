@@ -1,5 +1,12 @@
 // Configuration
 const MAKERS = ["total", "byd", "tesla", "volvo", "hyundai", "geely", "leapmotor", "volkswagen", "bmw", "changan deepal"];
+
+// CORS Proxy - Use one of these:
+// Option 1: allOrigins (recommended)
+const CORS_PROXY = "https://api.allorigins.win/raw?url=";
+// Option 2: corsproxy.io (backup)
+// const CORS_PROXY = "https://corsproxy.io/?";
+
 const BASE_DAILY = "https://evstats.gr/api/dailyBevModels/";
 const BASE_MAKER = "https://evstats.gr/api/makerMetrics";
 
@@ -51,7 +58,8 @@ function setupEventListeners() {
 // API Calls
 async function fetchDaily(dateStr) {
     try {
-        const response = await fetch(`${BASE_DAILY}${dateStr}`, {
+        const url = `${CORS_PROXY}${encodeURIComponent(BASE_DAILY + dateStr)}`;
+        const response = await fetch(url, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json'
@@ -59,13 +67,15 @@ async function fetchDaily(dateStr) {
         });
         
         if (!response.ok) {
+            console.error(`API Error: ${response.status} - ${dateStr}`);
             return null;
         }
         
         const data = await response.json();
+        console.log(`✓ Fetched data for ${dateStr}:`, data);
         return data;
     } catch (error) {
-        console.error('Fetch error:', error);
+        console.error('Fetch error for', dateStr, ':', error);
         return null;
     }
 }
@@ -169,7 +179,9 @@ async function fetchMakerData(timePeriod) {
     });
     
     try {
-        const response = await fetch(`${BASE_MAKER}?${params}`, {
+        const apiUrl = `${BASE_MAKER}?${params}`;
+        const url = `${CORS_PROXY}${encodeURIComponent(apiUrl)}`;
+        const response = await fetch(url, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json'
