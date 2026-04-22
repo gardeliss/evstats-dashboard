@@ -179,28 +179,49 @@ async function fetchMakerData(timePeriod) {
     });
     
     try {
-        const apiUrl = `${BASE_MAKER}?${params}`;
-        const url = `${CORS_PROXY}${encodeURIComponent(apiUrl)}`;
-        const response = await fetch(url, {
+        const apiUrl = `${BASE_MAKER}?${params.toString()}`;
+        console.log(`🔍 Fetching ${timePeriod} maker data from:`, apiUrl);
+        
+        // Try with CORS proxy first
+        let url = `${CORS_PROXY}${encodeURIComponent(apiUrl)}`;
+        let response = await fetch(url, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json'
             }
         });
         
+        console.log(`📊 Maker ${timePeriod} response status:`, response.status);
+        
+        // If proxy fails, try direct (might work on some browsers/extensions)
         if (!response.ok) {
+            console.log(`⚠️ Proxy failed, trying direct API call...`);
+            response = await fetch(apiUrl, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                }
+            });
+        }
+        
+        if (!response.ok) {
+            console.error(`❌ Maker ${timePeriod} API error:`, response.status, response.statusText);
             return { periods: [], data: {} };
         }
         
         const json = await response.json();
+        console.log(`✓ Maker ${timePeriod} raw data:`, json);
         
         let periods = json.periods || [];
         let data = json.data || {};
         
         // Unwrap nested data if needed
         if (data.data && typeof data.data === 'object') {
+            console.log('🔄 Unwrapping nested data structure');
             data = data.data;
         }
+        
+        console.log(`📈 Periods count: ${periods.length}, Data keys:`, Object.keys(data));
         
         // Limit periods
         const limit = timePeriod === 'month' ? 18 : timePeriod === 'quarter' ? 12 : 10;
@@ -213,9 +234,10 @@ async function fetchMakerData(timePeriod) {
             }
         }
         
+        console.log(`✅ Maker ${timePeriod} processed: ${periods.length} periods`);
         return { periods, data };
     } catch (error) {
-        console.error('Fetch maker error:', error);
+        console.error(`❌ Fetch maker ${timePeriod} error:`, error);
         return { periods: [], data: {} };
     }
 }
@@ -336,10 +358,13 @@ function renderMakerTable(tableId, data) {
     const tbody = table.querySelector('tbody');
     
     if (!data || !data.periods || data.periods.length === 0) {
-        thead.innerHTML = '<tr><th>Δεν υπάρχουν δεδομένα</th></tr>';
+        thead.innerHTML = '<tr><th colspan="11" style="text-align: center; color: var(--warning);">⚠️ Δεν υπάρχουν δεδομένα - ελέγξτε το Console (F12) για errors</th></tr>';
         tbody.innerHTML = '';
+        console.warn(`⚠️ No data for table ${tableId}`);
         return;
     }
+    
+    console.log(`✓ Rendering ${tableId} with ${data.periods.length} periods`);
     
     // Create headers
     thead.innerHTML = '<tr><th>Περίοδος</th></tr>';
