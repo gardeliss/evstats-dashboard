@@ -1,11 +1,8 @@
 // Configuration
 const MAKERS = ["total", "byd", "tesla", "volvo", "hyundai", "geely", "leapmotor", "volkswagen", "bmw", "changan deepal"];
 
-// CORS Proxy - Use one of these:
-// Option 1: allOrigins (recommended)
-const CORS_PROXY = "https://api.allorigins.win/raw?url=";
-// Option 2: corsproxy.io (backup)
-// const CORS_PROXY = "https://corsproxy.io/?";
+// CORS Proxy - corsproxy.io is faster than allOrigins
+const CORS_PROXY = "https://corsproxy.io/?";
 
 const BASE_DAILY = "https://evstats.gr/api/dailyBevModels/";
 const BASE_MAKER = "https://evstats.gr/api/makerMetrics";
@@ -56,28 +53,42 @@ function setupEventListeners() {
 }
 
 // API Calls
-async function fetchDaily(dateStr) {
-    try {
-        const url = `${CORS_PROXY}${encodeURIComponent(BASE_DAILY + dateStr)}`;
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: {
-                'Accept': 'application/json'
+async function fetchDaily(dateStr, retries = 2) {
+    for (let attempt = 0; attempt <= retries; attempt++) {
+        try {
+            const url = `${CORS_PROXY}${encodeURIComponent(BASE_DAILY + dateStr)}`;
+            const response = await fetch(url, {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json'
+                },
+                signal: AbortSignal.timeout(15000) // 15 second timeout
+            });
+            
+            if (!response.ok) {
+                if (attempt < retries) {
+                    console.warn(`⚠️ Attempt ${attempt + 1} failed for ${dateStr}, retrying...`);
+                    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 sec before retry
+                    continue;
+                }
+                console.error(`API Error: ${response.status} - ${dateStr}`);
+                return null;
             }
-        });
-        
-        if (!response.ok) {
-            console.error(`API Error: ${response.status} - ${dateStr}`);
+            
+            const data = await response.json();
+            console.log(`✓ Fetched data for ${dateStr}:`, data);
+            return data;
+        } catch (error) {
+            if (attempt < retries) {
+                console.warn(`⚠️ Attempt ${attempt + 1} error for ${dateStr}, retrying...`, error.message);
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                continue;
+            }
+            console.error('Fetch error for', dateStr, ':', error);
             return null;
         }
-        
-        const data = await response.json();
-        console.log(`✓ Fetched data for ${dateStr}:`, data);
-        return data;
-    } catch (error) {
-        console.error('Fetch error for', dateStr, ':', error);
-        return null;
     }
+    return null;
 }
 
 function extractCarModels(dailyJson) {
@@ -115,6 +126,15 @@ async function fetchMonthDailyAggregated(year, month) {
     
     showLoading();
     
+    // Calculate total days to fetch
+    let totalDays = 0;
+    for (let day = 1; day <= daysInMonth; day++) {
+        const currentDate = new Date(year, month - 1, day);
+        if (currentDate <= today) totalDays++;
+    }
+    
+    let fetchedDays = 0;
+    
     for (let day = 1; day <= daysInMonth; day++) {
         const currentDate = new Date(year, month - 1, day);
         
@@ -135,6 +155,13 @@ async function fetchMonthDailyAggregated(year, month) {
         }
         
         dailyRows.push(row);
+        
+        // Update progress
+        fetchedDays++;
+        const loadingText = document.querySelector('.loading-state p');
+        if (loadingText) {
+            loadingText.textContent = `Φόρτωση δεδομένων... (${fetchedDays}/${totalDays} ημέρες)`;
+        }
     }
     
     // Create summary
@@ -188,20 +215,26 @@ async function fetchMakerData(timePeriod) {
             method: 'GET',
             headers: {
                 'Accept': 'application/json'
-            }
+            },
+            signal: AbortSignal.timeout(20000) // 20 second timeout
         });
         
         console.log(`📊 Maker ${timePeriod} response status:`, response.status);
         
         // If proxy fails, try direct (might work on some browsers/extensions)
         if (!response.ok) {
-            console.log(`⚠️ Proxy failed, trying direct API call...`);
-            response = await fetch(apiUrl, {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json'
-                }
-            });
+            console.log(`⚠️ Proxy failed (${response.status}), trying direct API call...`);
+            try {
+                response = await fetch(apiUrl, {
+                    method: 'GET',
+                    headers: {
+                        'Accept': 'application/json'
+                    },
+                    signal: AbortSignal.timeout(20000)
+                });
+            } catch (directError) {
+                console.error(`❌ Direct call also failed:`, directError.message);
+            }
         }
         
         if (!response.ok) {
@@ -237,7 +270,7 @@ async function fetchMakerData(timePeriod) {
         console.log(`✅ Maker ${timePeriod} processed: ${periods.length} periods`);
         return { periods, data };
     } catch (error) {
-        console.error(`❌ Fetch maker ${timePeriod} error:`, error);
+        console.error(`❌ Fetch maker ${timePeriod} error:`, error.message);
         return { periods: [], data: {} };
     }
 }
