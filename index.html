@@ -31,40 +31,21 @@
         <!-- Control Panel -->
         <section class="control-panel">
             <div class="control-card">
-                <h2 class="section-title">Επιλογή Περιόδου</h2>
-                <div class="input-group">
-                    <div class="input-wrapper">
-                        <label for="year">Έτος</label>
-                        <input type="number" id="year" min="2013" max="2026" value="2025">
-                    </div>
-                    <div class="input-wrapper">
-                        <label for="month">Μήνας</label>
-                        <select id="month">
-                            <option value="1">Ιανουάριος</option>
-                            <option value="2">Φεβρουάριος</option>
-                            <option value="3">Μάρτιος</option>
-                            <option value="4">Απρίλιος</option>
-                            <option value="5">Μάιος</option>
-                            <option value="6">Ιούνιος</option>
-                            <option value="7">Ιούλιος</option>
-                            <option value="8">Αύγουστος</option>
-                            <option value="9">Σεπτέμβριος</option>
-                            <option value="10">Οκτώβριος</option>
-                            <option value="11">Νοέμβριος</option>
-                            <option value="12">Δεκέμβριος</option>
-                        </select>
-                    </div>
+                <h2 class="section-title">Τρέχων Μήνας</h2>
+                <div class="current-period-display">
+                    <div class="period-icon">📅</div>
+                    <div class="period-text" id="currentPeriod">Απρίλιος 2026</div>
                 </div>
                 <button id="fetchBtn" class="btn-primary">
                     <span class="btn-icon">🚀</span>
-                    <span>Ανάκτηση Δεδομένων</span>
+                    <span>Ανάκτηση Δεδομένων Μήνα</span>
                 </button>
                 <div class="info-note">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
                         <circle cx="8" cy="8" r="7" stroke="currentColor" stroke-width="1.5"/>
                         <path d="M8 4V4.01M8 6V12" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/>
                     </svg>
-                    Τα δεδομένα εμφανίζονται μέχρι τη σημερινή ημερομηνία
+                    Φορτώνει όλες τις ημέρες του τρέχοντος μήνα μέχρι σήμερα
                 </div>
                 <div class="info-note" style="margin-top: 0.5rem; background: rgba(16, 185, 129, 0.05); border-color: rgba(16, 185, 129, 0.3);">
                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
@@ -89,7 +70,6 @@
                     <span class="title-icon">📊</span>
                     Ημερήσια Δεδομένα
                 </h2>
-                <div class="period-badge" id="selectedPeriod"></div>
             </div>
             
             <div class="stats-cards">
@@ -108,7 +88,7 @@
             </div>
 
             <div class="data-card">
-                <h3 class="card-title">Ημερήσιοι Πίνακες</h3>
+                <h3 class="card-title">Ημερήσιος Πίνακας (Πιο Πρόσφατα Πάνω)</h3>
                 <div class="table-wrapper">
                     <table id="dailyTable" class="data-table">
                         <thead>
@@ -122,13 +102,14 @@
             </div>
 
             <div class="data-card">
-                <h3 class="card-title">Μηνιαία Σύνοψη Μοντέλων</h3>
+                <h3 class="card-title">Μηνιαία Σύνοψη Μοντέλων (Ταξινομημένα από Περισσότερα → Λιγότερα)</h3>
                 <div class="table-wrapper">
                     <table id="summaryTable" class="data-table">
                         <thead>
                             <tr>
+                                <th>#</th>
                                 <th>Μοντέλο</th>
-                                <th>Πλήθος</th>
+                                <th>Συνολικό Πλήθος</th>
                             </tr>
                         </thead>
                         <tbody></tbody>
@@ -142,15 +123,15 @@
             <div class="section-header">
                 <h2 class="section-title">
                     <span class="title-icon">🏭</span>
-                    Μετρικές Κατασκευαστών
+                    Μετρικές Κατασκευαστών (Πιο Πρόσφατα Πάνω)
                 </h2>
             </div>
 
             <!-- Period Tabs -->
             <div class="period-tabs">
-                <button class="tab-btn active" data-period="month">Μηνιαία</button>
-                <button class="tab-btn" data-period="quarter">Τριμηνιαία</button>
-                <button class="tab-btn" data-period="year">Ετήσια</button>
+                <button class="tab-btn active" data-period="month">Μηνιαία (18 τελευταίοι)</button>
+                <button class="tab-btn" data-period="quarter">Τριμηνιαία (12 τελευταία)</button>
+                <button class="tab-btn" data-period="year">Ετήσια (10 τελευταία)</button>
             </div>
 
             <!-- Month Data -->

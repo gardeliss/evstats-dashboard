@@ -1,7 +1,7 @@
 // Configuration
 const MAKERS = ["total", "byd", "tesla", "volvo", "hyundai", "geely", "leapmotor", "volkswagen", "bmw", "changan deepal"];
 
-// CORS Proxy - corsproxy.io is faster than allOrigins
+// CORS Proxy
 const CORS_PROXY = "https://corsproxy.io/?";
 
 const BASE_DAILY = "https://evstats.gr/api/dailyBevModels/";
@@ -21,26 +21,24 @@ let makerYearData = null;
 
 // Initialize
 document.addEventListener('DOMContentLoaded', () => {
-    initializeDateInputs();
+    displayCurrentMonth();
     setupEventListeners();
+    // Load maker metrics on page load
     fetchMakerMetrics();
 });
 
-function initializeDateInputs() {
+function displayCurrentMonth() {
     const today = new Date();
-    const yearInput = document.getElementById('year');
-    const monthInput = document.getElementById('month');
-    
-    yearInput.value = today.getFullYear();
-    yearInput.max = today.getFullYear();
-    monthInput.value = today.getMonth() + 1;
+    const month = MONTH_NAMES[today.getMonth()];
+    const year = today.getFullYear();
+    document.getElementById('currentPeriod').textContent = `${month} ${year}`;
 }
 
 function setupEventListeners() {
-    document.getElementById('fetchBtn').addEventListener('click', fetchDailyData);
+    document.getElementById('fetchBtn').addEventListener('click', fetchCurrentMonthData);
     document.getElementById('retryBtn').addEventListener('click', () => {
         hideError();
-        fetchDailyData();
+        fetchCurrentMonthData();
     });
     
     // Period tabs
@@ -62,13 +60,13 @@ async function fetchDaily(dateStr, retries = 2) {
                 headers: {
                     'Accept': 'application/json'
                 },
-                signal: AbortSignal.timeout(15000) // 15 second timeout
+                signal: AbortSignal.timeout(15000)
             });
             
             if (!response.ok) {
                 if (attempt < retries) {
                     console.warn(`⚠️ Attempt ${attempt + 1} failed for ${dateStr}, retrying...`);
-                    await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 sec before retry
+                    await new Promise(resolve => setTimeout(resolve, 1000));
                     continue;
                 }
                 console.error(`API Error: ${response.status} - ${dateStr}`);
@@ -76,15 +74,15 @@ async function fetchDaily(dateStr, retries = 2) {
             }
             
             const data = await response.json();
-            console.log(`✓ Fetched data for ${dateStr}:`, data);
+            console.log(`✓ Fetched data for ${dateStr}`);
             return data;
         } catch (error) {
             if (attempt < retries) {
-                console.warn(`⚠️ Attempt ${attempt + 1} error for ${dateStr}, retrying...`, error.message);
+                console.warn(`⚠️ Attempt ${attempt + 1} error for ${dateStr}, retrying...`);
                 await new Promise(resolve => setTimeout(resolve, 1000));
                 continue;
             }
-            console.error('Fetch error for', dateStr, ':', error);
+            console.error('Fetch error for', dateStr, ':', error.message);
             return null;
         }
     }
@@ -111,22 +109,18 @@ function extractCarModels(dailyJson) {
     return {};
 }
 
-async function fetchMonthDailyAggregated(year, month) {
-    const daysInMonth = new Date(year, month, 0).getDate();
+async function fetchCurrentMonthData() {
     const today = new Date();
-    const startDate = new Date(year, month - 1, 1);
+    const year = today.getFullYear();
+    const month = today.getMonth() + 1; // JavaScript months are 0-indexed
     
-    // Don't fetch future months
-    if (startDate > today) {
-        return { daily: [], summary: [] };
-    }
+    hideError();
+    showLoading();
     
+    const daysInMonth = new Date(year, month, 0).getDate();
     const aggregated = {};
     const dailyRows = [];
     
-    showLoading();
-    
-    // Calculate total days to fetch
     let totalDays = 0;
     for (let day = 1; day <= daysInMonth; day++) {
         const currentDate = new Date(year, month - 1, day);
@@ -150,8 +144,10 @@ async function fetchMonthDailyAggregated(year, month) {
         const row = { date: dateStr };
         
         for (const [model, count] of Object.entries(models)) {
-            row[model] = parseInt(count) || 0;
-            aggregated[model] = (aggregated[model] || 0) + (parseInt(count) || 0);
+            const numCount = parseInt(count) || 0;
+            row[model] = numCount;
+            // Aggregate: sum all counts for the month
+            aggregated[model] = (aggregated[model] || 0) + numCount;
         }
         
         dailyRows.push(row);
@@ -164,14 +160,21 @@ async function fetchMonthDailyAggregated(year, month) {
         }
     }
     
-    // Create summary
-    const summary = Object.entries(aggregated)
+    hideLoading();
+    
+    if (dailyRows.length === 0) {
+        showError('Δεν βρέθηκαν δεδομένα για τον τρέχοντα μήνα');
+        return;
+    }
+    
+    dailyData = dailyRows;
+    
+    // Create summary sorted by count (highest first)
+    summaryData = Object.entries(aggregated)
         .map(([model, count]) => ({ model, count }))
         .sort((a, b) => b.count - a.count);
     
-    hideLoading();
-    
-    return { daily: dailyRows, summary };
+    renderDailySection(year, month);
 }
 
 async function fetchMakerMetrics() {
@@ -179,9 +182,9 @@ async function fetchMakerMetrics() {
     
     try {
         const [monthData, quarterData, yearData] = await Promise.all([
-            fetchMakerData('month'),
-            fetchMakerData('quarter'),
-            fetchMakerData('year')
+            fetchMakerData('month', 18),
+            fetchMakerData('quarter', 12),
+            fetchMakerData('year', 10)
         ]);
         
         makerMonthData = monthData;
@@ -199,7 +202,7 @@ async function fetchMakerMetrics() {
     }
 }
 
-async function fetchMakerData(timePeriod) {
+async function fetchMakerData(timePeriod, limitPeriods) {
     const params = new URLSearchParams({
         filterMakers: JSON.stringify(MAKERS),
         timePeriod: timePeriod
@@ -207,63 +210,42 @@ async function fetchMakerData(timePeriod) {
     
     try {
         const apiUrl = `${BASE_MAKER}?${params.toString()}`;
-        console.log(`🔍 Fetching ${timePeriod} maker data from:`, apiUrl);
+        console.log(`🔍 Fetching ${timePeriod} maker data...`);
         
-        // Try with CORS proxy first
-        let url = `${CORS_PROXY}${encodeURIComponent(apiUrl)}`;
-        let response = await fetch(url, {
+        const url = `${CORS_PROXY}${encodeURIComponent(apiUrl)}`;
+        const response = await fetch(url, {
             method: 'GET',
             headers: {
                 'Accept': 'application/json'
             },
-            signal: AbortSignal.timeout(20000) // 20 second timeout
+            signal: AbortSignal.timeout(20000)
         });
         
         console.log(`📊 Maker ${timePeriod} response status:`, response.status);
         
-        // If proxy fails, try direct (might work on some browsers/extensions)
         if (!response.ok) {
-            console.log(`⚠️ Proxy failed (${response.status}), trying direct API call...`);
-            try {
-                response = await fetch(apiUrl, {
-                    method: 'GET',
-                    headers: {
-                        'Accept': 'application/json'
-                    },
-                    signal: AbortSignal.timeout(20000)
-                });
-            } catch (directError) {
-                console.error(`❌ Direct call also failed:`, directError.message);
-            }
-        }
-        
-        if (!response.ok) {
-            console.error(`❌ Maker ${timePeriod} API error:`, response.status, response.statusText);
+            console.error(`❌ Maker ${timePeriod} API error:`, response.status);
             return { periods: [], data: {} };
         }
         
         const json = await response.json();
-        console.log(`✓ Maker ${timePeriod} raw data:`, json);
+        console.log(`✓ Maker ${timePeriod} data received`);
         
         let periods = json.periods || [];
         let data = json.data || {};
         
         // Unwrap nested data if needed
         if (data.data && typeof data.data === 'object') {
-            console.log('🔄 Unwrapping nested data structure');
             data = data.data;
         }
         
-        console.log(`📈 Periods count: ${periods.length}, Data keys:`, Object.keys(data));
-        
-        // Limit periods
-        const limit = timePeriod === 'month' ? 18 : timePeriod === 'quarter' ? 12 : 10;
-        periods = periods.slice(-limit);
+        // Get last N periods
+        periods = periods.slice(-limitPeriods);
         
         // Slice data arrays to match
         for (const maker of MAKERS) {
             if (Array.isArray(data[maker])) {
-                data[maker] = data[maker].slice(-limit);
+                data[maker] = data[maker].slice(-limitPeriods);
             }
         }
         
@@ -276,31 +258,9 @@ async function fetchMakerData(timePeriod) {
 }
 
 // UI Functions
-async function fetchDailyData() {
-    const year = parseInt(document.getElementById('year').value);
-    const month = parseInt(document.getElementById('month').value);
-    
-    hideError();
-    
-    const result = await fetchMonthDailyAggregated(year, month);
-    
-    if (result.daily.length === 0) {
-        showError('Δεν βρέθηκαν δεδομένα για τον επιλεγμένο μήνα (ή είναι μελλοντικός μήνας)');
-        return;
-    }
-    
-    dailyData = result.daily;
-    summaryData = result.summary;
-    
-    renderDailySection(year, month);
-}
-
 function renderDailySection(year, month) {
     // Show section
     document.getElementById('dailySection').style.display = 'block';
-    
-    // Update period badge
-    document.getElementById('selectedPeriod').textContent = `${MONTH_NAMES[month - 1]} ${year}`;
     
     // Update stats
     document.getElementById('totalDays').textContent = dailyData.length;
@@ -340,23 +300,26 @@ function renderDailyTable() {
         });
     });
     
+    const modelArray = Array.from(models).sort();
+    
     // Add headers
-    models.forEach(model => {
+    modelArray.forEach(model => {
         const th = document.createElement('th');
         th.textContent = model;
         thead.appendChild(th);
     });
     
-    // Add rows (reverse to show newest first)
+    // Add rows (reverse to show newest first - most recent on top)
     const reversedData = [...dailyData].reverse();
     reversedData.forEach(day => {
         const tr = document.createElement('tr');
         
         const dateCell = document.createElement('td');
         dateCell.textContent = formatDateDisplay(day.date);
+        dateCell.style.fontWeight = '600';
         tr.appendChild(dateCell);
         
-        models.forEach(model => {
+        modelArray.forEach(model => {
             const td = document.createElement('td');
             td.textContent = day[model] || 0;
             tr.appendChild(td);
@@ -370,8 +333,15 @@ function renderSummaryTable() {
     const tbody = document.getElementById('summaryTable').querySelector('tbody');
     tbody.innerHTML = '';
     
-    summaryData.forEach(item => {
+    // Summary is already sorted (highest first)
+    summaryData.forEach((item, index) => {
         const tr = document.createElement('tr');
+        
+        const rankCell = document.createElement('td');
+        rankCell.textContent = index + 1;
+        rankCell.style.fontWeight = '700';
+        rankCell.style.color = 'var(--primary-light)';
+        tr.appendChild(rankCell);
         
         const modelCell = document.createElement('td');
         modelCell.textContent = item.model;
@@ -379,6 +349,7 @@ function renderSummaryTable() {
         
         const countCell = document.createElement('td');
         countCell.textContent = item.count.toLocaleString('el-GR');
+        countCell.style.fontWeight = '600';
         tr.appendChild(countCell);
         
         tbody.appendChild(tr);
@@ -391,13 +362,10 @@ function renderMakerTable(tableId, data) {
     const tbody = table.querySelector('tbody');
     
     if (!data || !data.periods || data.periods.length === 0) {
-        thead.innerHTML = '<tr><th colspan="11" style="text-align: center; color: var(--warning);">⚠️ Δεν υπάρχουν δεδομένα - ελέγξτε το Console (F12) για errors</th></tr>';
+        thead.innerHTML = '<tr><th colspan="11" style="text-align: center; color: var(--warning);">⚠️ Δεν υπάρχουν δεδομένα</th></tr>';
         tbody.innerHTML = '';
-        console.warn(`⚠️ No data for table ${tableId}`);
         return;
     }
-    
-    console.log(`✓ Rendering ${tableId} with ${data.periods.length} periods`);
     
     // Create headers
     thead.innerHTML = '<tr><th>Περίοδος</th></tr>';
@@ -409,7 +377,7 @@ function renderMakerTable(tableId, data) {
         headerRow.appendChild(th);
     });
     
-    // Create rows (reverse to show newest first)
+    // Create rows - REVERSED to show newest first (most recent on top)
     tbody.innerHTML = '';
     const reversedPeriods = [...data.periods].reverse();
     
@@ -419,12 +387,13 @@ function renderMakerTable(tableId, data) {
         
         const periodCell = document.createElement('td');
         periodCell.textContent = period;
+        periodCell.style.fontWeight = '600';
         tr.appendChild(periodCell);
         
         MAKERS.forEach(maker => {
             const td = document.createElement('td');
             const value = data.data[maker]?.[reverseIdx] || 0;
-            td.textContent = value.toLocaleString('el-GR');
+            td.textContent = Math.round(value).toLocaleString('el-GR');
             tr.appendChild(td);
         });
         
